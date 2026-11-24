@@ -1,0 +1,62 @@
+services:
+  # 1. SERVIDOR ON-PREMISE LEGACY
+  onpremise-legacy-db:
+    image: postgres:16-alpine
+    container_name: onpremise-legacy-server
+    hostname: onprem-datacenter-01
+    environment:
+      POSTGRES_USER: legacy_admin
+      POSTGRES_PASSWORD: OnPremPassword123!
+      POSTGRES_DB: municipal_legacy_db
+    volumes:
+      - ./onprem-init/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U legacy_admin -d municipal_legacy_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hybrid-migration-net
+
+  # 2. INSTANCIA DESTINO EN AWS (Simulación de AWS RDS PostgreSQL)
+  aws-rds-target-db:
+    image: postgres:16-alpine
+    container_name: aws-rds-cloud-instance
+    hostname: rds-us-east-1.amazonaws.com
+    environment:
+      POSTGRES_USER: rds_admin
+      POSTGRES_PASSWORD: AwsRdsPassword123!
+      POSTGRES_DB: municipal_cloud_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rds_admin -d municipal_cloud_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hybrid-migration-net
+
+  # 3. HERRAMIENTA DE MIGRACIÓN (Rehosting / Lift-and-Shift Runner)
+  migration-runner:
+    image: postgres:16-alpine
+    container_name: lift-and-shift-agent
+    depends_on:
+      onpremise-legacy-db:
+        condition: service_healthy
+      aws-rds-target-db:
+        condition: service_healthy
+    environment:
+      ONPREM_USER: legacy_admin
+      ONPREM_PASSWORD: OnPremPassword123!
+      ONPREM_DB: municipal_legacy_db
+      RDS_USER: rds_admin
+      RDS_PASSWORD: AwsRdsPassword123!
+      RDS_DB: municipal_cloud_db
+    volumes:
+      - ./scripts/migrate.sh:/migrate.sh:ro
+    entrypoint: ["sh", "/migrate.sh"]
+    networks:
+      - hybrid-migration-net
+
+networks:
+  hybrid-migration-net:
+    driver: bridge
