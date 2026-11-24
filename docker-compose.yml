@@ -1,0 +1,46 @@
+services:
+  # HUB CENTRAL: Bastion Host (Único punto de entrada expuesto al exterior)
+  bastion-host:
+    build: ./bastion
+    container_name: hub-bastion-host
+    hostname: bastion-jumpbox
+    ports:
+      - "2222:22"
+    networks:
+      - hub-network
+      - spoke-qa-network
+      - spoke-prod-network
+
+  # SPOKE 1 (QA): Servicio interno aislado (sin puertos externos)
+  spoke-qa-service:
+    image: python:3.12-alpine
+    container_name: spoke-qa-private-node
+    hostname: qa-internal-node
+    command: >
+      python -c "from http.server import BaseHTTPRequestHandler, HTTPServer;
+      H = type('H', (BaseHTTPRequestHandler,), {'do_GET': lambda s: (s.send_response(200), s.send_header('Content-Type','application/json'), s.end_headers(), s.wfile.write(b'{\"env\":\"SPOKE-QA\",\"node\":\"qa-internal-node\",\"status\":\"Private Resource Reached via Bastion\"}\n'))});
+      HTTPServer(('0.0.0.0', 8080), H).serve_forever()"
+    networks:
+      - spoke-qa-network
+
+  # SPOKE 2 (PROD): Servicio interno aislado (sin puertos externos)
+  spoke-prod-service:
+    image: python:3.12-alpine
+    container_name: spoke-prod-private-node
+    hostname: prod-internal-node
+    command: >
+      python -c "from http.server import BaseHTTPRequestHandler, HTTPServer;
+      H = type('H', (BaseHTTPRequestHandler,), {'do_GET': lambda s: (s.send_response(200), s.send_header('Content-Type','application/json'), s.end_headers(), s.wfile.write(b'{\"env\":\"SPOKE-PROD\",\"node\":\"prod-internal-node\",\"status\":\"Private Resource Reached via Bastion\"}\n'))});
+      HTTPServer(('0.0.0.0', 8080), H).serve_forever()"
+    networks:
+      - spoke-prod-network
+
+networks:
+  hub-network:
+    driver: bridge
+  spoke-qa-network:
+    driver: bridge
+    internal: true
+  spoke-prod-network:
+    driver: bridge
+    internal: true
