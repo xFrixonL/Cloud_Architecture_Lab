@@ -1,0 +1,44 @@
+services:
+  # API Gateway + Reverse Proxy + Load Balancer
+  api-gateway:
+    image: nginx:alpine
+    container_name: cloud-api-gateway
+    ports:
+      - "8088:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ecs-task-1
+      - ecs-task-2
+      - lambda-validator
+    networks:
+      - cloud-net
+
+  # Contenedor 1 simulando Tarea en AWS ECS / Fargate
+  ecs-task-1:
+    build: ./ecs-service
+    hostname: ecs-fargate-task-az1
+    environment:
+      - DEPLOY_TARGET=AWS-ECS-Fargate-AZ1
+    networks:
+      - cloud-net
+
+  # Contenedor 2 simulando Tarea en AWS ECS / Fargate
+  ecs-task-2:
+    build: ./ecs-service
+    hostname: ecs-fargate-task-az2
+    environment:
+      - DEPLOY_TARGET=AWS-ECS-Fargate-AZ2
+    networks:
+      - cloud-net
+
+  # Función Serverless real usando AWS Lambda Runtime Interface Emulator
+  lambda-validator:
+    build: ./lambda-function
+    container_name: aws-lambda-exif-validator
+    networks:
+      - cloud-net
+
+networks:
+  cloud-net:
+    driver: bridge
